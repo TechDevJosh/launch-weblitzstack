@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   const { fullName, email, contactNumber, tier, addOns } = req.body;
 
   const { error } = await supabase
-    .from('leads')
+    .from('launch-weblitzstack') // 👈 updated table name
     .insert([
       {
         full_name: fullName,

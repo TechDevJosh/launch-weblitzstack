@@ -10,18 +10,29 @@ export default async function handler(req, res) {
 
   const { fullName, email, contactNumber, tier, addOns } = req.body;
 
-  const { error } = await supabase
-    .from('launch-weblitzstack') // 👈 updated table name
-    .insert([
-      {
-        full_name: fullName,
-        email,
-        contact_number: contactNumber,
-        tier,
-        add_ons: addOns,
-      },
-    ]);
+  console.log('[API] Received data:', {
+    fullName,
+    email,
+    contactNumber,
+    tier,
+    addOns,
+  });
 
-  if (error) return res.status(500).json({ error });
+  const { error } = await supabase.from('launch-weblitzstack').insert([
+    {
+      full_name: fullName,
+      email,
+      contact_number: contactNumber,
+      tier,
+      add_ons: addOns,
+    },
+  ]);
+
+  if (error) {
+    console.error('[API] Supabase insert error:', error.message);
+    return res.status(500).json({ error });
+  }
+
+  console.log('[API] Data inserted successfully!');
   res.status(200).json({ message: 'Success' });
 }

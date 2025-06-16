@@ -222,29 +222,6 @@ const FinalQuoteSummary = ({ finalPackage }) => (
   </div>
 );
 
-const saveToSupabase = async (formData) => {
-  try {
-    const response = await fetch('/api/submit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fullName: formData.fullName,
-        email: formData.email,
-        contactNumber: formData.contactNumber,
-        tier: formData.tier,
-        addOns: formData.addOns,
-        consultationDate: formData.consultationDate || null,
-        consultationTime: formData.consultationTime || null,
-      }),
-    });
-
-    const result = await response.json();
-    console.log('[Supabase] Response:', result);
-  } catch (error) {
-    console.error('[Supabase] Error submitting:', error);
-  }
-};
-
 const ReferralAndShare = ({ referralCode }) => (
   <div className="bg-purple-900/20 border border-purple-700 rounded-2xl p-6 text-center my-10">
     <h3 className="text-2xl font-bold text-white mb-2">Be a Helping Hand!</h3>
@@ -385,6 +362,99 @@ export default function App() {
 
   const currentStepConfig = steps[currentStep];
 
+  const finalPackage = useMemo(() => {
+    const selectedTier = PRICING_CONFIG.tiers.find(
+      (t) => t.id === formData.tier
+    );
+    const selectedAddOns = PRICING_CONFIG.addOns.filter((addon) =>
+      formData.addOns.includes(addon.id)
+    );
+    let totalSetupFee = selectedTier.setupFee;
+    selectedAddOns.forEach((addon) => {
+      totalSetupFee += addon.price;
+    });
+    const referralCodeValue = formData.fullName
+      ? `${formData.fullName.replace(/\s+/g, '').toUpperCase()}5OFF`
+      : 'YOURCODE5OFF';
+    return {
+      tier: selectedTier,
+      addOns: selectedAddOns,
+      totalSetupFee: totalSetupFee,
+      monthlyFee: selectedTier.monthlyFee,
+      fullName: formData.fullName,
+      email: formData.email,
+      referralCode: referralCodeValue,
+    };
+  }, [formData]);
+
+  // --- NEW: Helper function to generate a plain text summary ---
+  const generateSummaryText = (pkg) => {
+    let summary = `Tier: ${pkg.tier.name}\n`;
+    summary += `One-Time Setup Fee: ₱${pkg.totalSetupFee.toLocaleString()}\n`;
+    summary += `Monthly Fee: ₱${pkg.monthlyFee.toLocaleString()}/month\n\n`;
+
+    if (pkg.addOns.length > 0) {
+      summary += 'Selected Add-ons:\n';
+      pkg.addOns.forEach((addon) => {
+        summary += `- ${addon.label}\n`;
+      });
+    }
+    return summary;
+  };
+
+  // --- Replace your entire 'saveToSupabase' function with this one ---
+
+  const saveToSupabase = async (formData) => {
+    try {
+      // --- First, submit the data to Supabase ---
+      const supabaseResponse = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          consultation_timestamp: formData.consultationTime,
+        }),
+      });
+
+      if (!supabaseResponse.ok) {
+        const errorResult = await supabaseResponse.json();
+        throw new Error(`Supabase error: ${errorResult.error}`);
+      }
+
+      const supabaseResult = await supabaseResponse.json();
+      console.log('[Supabase] Response:', supabaseResult);
+
+      // --- If Supabase succeeds, generate summary and send confirmation email ---
+
+      const summaryText = generateSummaryText(finalPackage);
+
+      const emailResponse = await fetch('/api/send-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          email: formData.email,
+          referralCode: finalPackage.referralCode,
+          finalPackage: finalPackage,
+          consultationTime: formData.consultationTime, // ✅ ADD THIS LINE
+        }),
+      });
+
+      if (!emailResponse.ok) {
+        const errorResult = await emailResponse.json();
+        throw new Error(`Resend error: ${errorResult.error}`);
+      }
+
+      const emailResult = await emailResponse.json();
+      console.log('[Resend] Response:', emailResult);
+    } catch (error) {
+      console.error(
+        '[Submission Error] Failed to submit form or send email:',
+        error
+      );
+    }
+  };
+
   const validateField = (name, value) => {
     let error = '';
     const stepConfig = steps.find((s) => s.key === name);
@@ -476,31 +546,6 @@ export default function App() {
     setErrors({});
     setCurrentStep(0);
   };
-
-  const finalPackage = useMemo(() => {
-    const selectedTier = PRICING_CONFIG.tiers.find(
-      (t) => t.id === formData.tier
-    );
-    const selectedAddOns = PRICING_CONFIG.addOns.filter((addon) =>
-      formData.addOns.includes(addon.id)
-    );
-    let totalSetupFee = selectedTier.setupFee;
-    selectedAddOns.forEach((addon) => {
-      totalSetupFee += addon.price;
-    });
-    const referralCodeValue = formData.fullName
-      ? `${formData.fullName.replace(/\s+/g, '').toUpperCase()}5OFF`
-      : 'YOURCODE5OFF';
-    return {
-      tier: selectedTier,
-      addOns: selectedAddOns,
-      totalSetupFee: totalSetupFee,
-      monthlyFee: selectedTier.monthlyFee,
-      fullName: formData.fullName,
-      email: formData.email,
-      referralCode: referralCodeValue,
-    };
-  }, [formData]);
 
   useEffect(() => {
     if (formData.consultationDate) {

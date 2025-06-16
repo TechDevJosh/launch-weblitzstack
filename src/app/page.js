@@ -233,6 +233,8 @@ const saveToSupabase = async (formData) => {
         contactNumber: formData.contactNumber,
         tier: formData.tier,
         addOns: formData.addOns,
+        consultationDate: formData.consultationDate || null,
+        consultationTime: formData.consultationTime || null,
       }),
     });
 
@@ -413,7 +415,14 @@ export default function App() {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+
     validateField(name, value);
+
+    if (name === 'consultationDate' || name === 'consultationTime') {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+      return;
+    }
+
     if (type === 'checkbox') {
       setFormData((prev) => ({
         ...prev,
@@ -759,6 +768,7 @@ export default function App() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              saveToSupabase(formData); // ✅ This triggers final save
               navigateToStepById('scheduleConfirmation');
             }}
             className="space-y-4"

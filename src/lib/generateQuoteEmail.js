@@ -1,6 +1,5 @@
 import mjml2html from 'mjml';
 
-// ✅ Accept 'featureListHtml' as a new parameter
 export function generateQuoteEmail({
   heading,
   name,
@@ -42,9 +41,9 @@ export function generateQuoteEmail({
         .summary-label { color: #9ca3af; text-align: left; }
         .summary-value { color: #ffffff; font-weight: bold; text-align: right; }
         /* Style for the raw HTML list */
-        ul { margin: 0; padding-left: 20px; color: #d1d5db; }
-        li { padding-bottom: 8px; }
-        p { margin: 0; padding: 0; color: #a5b4fc; }
+        .feature-list ul { margin: 0; padding-left: 20px; color: #d1d5db; text-align: left;}
+        .feature-list li { padding-bottom: 8px; }
+        .feature-list p { margin: 0; padding: 0; color: #a5b4fc; text-align: left; }
       </mj-style>
     </mj-head>
     <mj-body background-color="#f3f4f6">
@@ -79,7 +78,10 @@ export function generateQuoteEmail({
             <mj-divider border-width="1px" border-color="#374151" padding="24px 0" />
             
             <mj-text font-size="18px" font-weight="bold" color="#a5b4fc" padding-bottom="16px">Package Inclusions:</mj-text>
-            <mj-raw>${featureListHtml}</mj-raw>
+            
+            <mj-text css-class="feature-list" padding="0 25px">
+              <mj-raw>${featureListHtml}</mj-raw>
+            </mj-text>
             
             <mj-section css-class="referral-container" padding-top="32px">
               <mj-column>

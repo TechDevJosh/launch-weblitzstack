@@ -222,6 +222,27 @@ const FinalQuoteSummary = ({ finalPackage }) => (
   </div>
 );
 
+const saveToSupabase = async (formData) => {
+  try {
+    const response = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fullName: formData.fullName,
+        email: formData.email,
+        contactNumber: formData.contactNumber,
+        tier: formData.tier,
+        addOns: formData.addOns,
+      }),
+    });
+
+    const result = await response.json();
+    console.log('[Supabase] Response:', result);
+  } catch (error) {
+    console.error('[Supabase] Error submitting:', error);
+  }
+};
+
 const ReferralAndShare = ({ referralCode }) => (
   <div className="bg-purple-900/20 border border-purple-700 rounded-2xl p-6 text-center my-10">
     <h3 className="text-2xl font-bold text-white mb-2">Be a Helping Hand!</h3>
@@ -656,7 +677,10 @@ export default function App() {
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button
-              onClick={() => navigateToStepById('availNow')}
+              onClick={() => {
+                saveToSupabase(formData); // ✅ pass it in
+                navigateToStepById('availNow');
+              }}
               className="bg-blue-600 text-white font-bold py-4 px-8 rounded-full hover:bg-blue-700 transition transform hover:scale-105 shadow-lg text-lg"
             >
               Avail Now

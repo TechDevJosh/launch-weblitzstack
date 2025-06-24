@@ -305,6 +305,8 @@ export default function App() {
   const [availableTimes, setAvailableTimes] = useState([]);
   const [isTimeLoading, setIsTimeLoading] = useState(false);
   const [expandedAddOn, setExpandedAddOn] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const selectedTier = useMemo(() => PRICING_CONFIG.tiers.find(t => t.id === formData.tier), [formData.tier]);
 
@@ -387,32 +389,28 @@ export default function App() {
     const selectedAddOns = PRICING_CONFIG.addOns.filter((addon) =>
       formData.addOns.includes(addon.id)
     );
-    
-    let baseCost = 0;
-    if (formData.billingCycle === 'monthly') {
-        baseCost = selectedTier.setupFee;
-    } else {
-        baseCost = selectedTier.annualFee;
-    }
 
-    let totalCost = baseCost;
-    selectedAddOns.forEach((addon) => {
-      totalCost += addon.price;
-    });
+    const addOnsCost = selectedAddOns.reduce((acc, addon) => acc + addon.price, 0);
+    const rushCost = formData.isRush ? selectedTier.rushFee : 0;
 
-    if (formData.isRush) {
-        totalCost += selectedTier.rushFee;
-    }
+    const totalSetupFee = selectedTier.setupFee + addOnsCost + rushCost;
+    const annualTotal = selectedTier.annualFee + addOnsCost + rushCost;
+
+    const totalCost =
+      formData.billingCycle === 'monthly' ? totalSetupFee : annualTotal;
 
     return {
       tier: selectedTier,
       addOns: selectedAddOns,
-      totalCost: totalCost,
+      totalCost,
+      totalSetupFee,
       monthlyFee: selectedTier.monthlyFee,
       billingCycle: formData.billingCycle,
       isRush: formData.isRush,
       fullName: formData.fullName,
-      referralCode: formData.fullName ? `${formData.fullName.replace(/\s+/g, '').toUpperCase()}5OFF` : 'YOURCODE5OFF'
+      referralCode: formData.fullName
+        ? `${formData.fullName.replace(/\s+/g, '').toUpperCase()}5OFF`
+        : 'YOURCODE5OFF',
     };
   }, [formData, selectedTier]);
 
@@ -487,7 +485,7 @@ export default function App() {
   };
 
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
-  
+
   const startOver = () => {
     setFormData({
       fullName: '',
@@ -502,6 +500,66 @@ export default function App() {
     });
     setErrors({});
     setCurrentStep(0);
+  };
+
+  const submitRequest = async () => {
+    setIsSubmitting(true);
+    setSubmitError('');
+
+    const payload = {
+      fullName: formData.fullName,
+      email: formData.email,
+      contactNumber: formData.contactNumber,
+      tier: finalPackage.tier.id,
+      addOns: finalPackage.addOns.map((a) => a.id),
+      consultation_timestamp: formData.consultationTime || null,
+    };
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
+
+    try {
+      const submitRes = await fetch(`${baseUrl}/api/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!submitRes.ok) {
+        const msg = await submitRes.text();
+        console.error('Supabase submission failed:', msg);
+        setSubmitError('Database error. Please try again.');
+        return false;
+      }
+
+      const confirmRes = await fetch(`${baseUrl}/api/send-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          email: formData.email,
+          finalPackage: {
+            tier: { id: finalPackage.tier.id, name: finalPackage.tier.name },
+            totalSetupFee: finalPackage.totalSetupFee,
+            monthlyFee: finalPackage.monthlyFee,
+            addOns: finalPackage.addOns,
+          },
+          referralCode: finalPackage.referralCode,
+          consultationTime: formData.consultationTime || null,
+        }),
+      });
+      if (!confirmRes.ok) {
+        const msg = await confirmRes.text();
+        console.error('Resend confirmation failed:', msg);
+        setSubmitError('Email send failed.');
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Submission error:', err);
+      setSubmitError('Request failed: ' + err.message);
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   useEffect(() => {
@@ -603,10 +661,17 @@ export default function App() {
           <p className="text-lg text-gray-300 mb-8">
             What would you like to do next?
           </p>
+          {submitError && (
+            <p className="text-red-500 mb-4">{submitError}</p>
+          )}
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button
-              onClick={() => navigateToStepById('availNow')}
-              className="bg-teal-600 text-white font-bold py-4 px-8 rounded-full hover:bg-teal-700 transition transform hover:scale-105 shadow-lg text-lg"
+              onClick={async () => {
+                const ok = await submitRequest();
+                if (ok) navigateToStepById('availNow');
+              }}
+              disabled={isSubmitting}
+              className="bg-teal-600 text-white font-bold py-4 px-8 rounded-full hover:bg-teal-700 transition transform hover:scale-105 shadow-lg text-lg disabled:bg-gray-500"
             >
               Avail Now
             </button>
@@ -680,10 +745,14 @@ export default function App() {
             Please select a date and time that works for you. Times are shown in
             your local timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone}).
           </p>
+          {submitError && (
+            <p className="text-red-500 mb-4">{submitError}</p>
+          )}
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
-              navigateToStepById('scheduleConfirmation');
+              const ok = await submitRequest();
+              if (ok) navigateToStepById('scheduleConfirmation');
             }}
             className="space-y-4"
           >
@@ -722,7 +791,7 @@ export default function App() {
               </button>
               <button
                 type="submit"
-                disabled={!formData.consultationTime}
+                disabled={!formData.consultationTime || isSubmitting}
                 className="bg-teal-600 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-700 transition disabled:bg-gray-500"
               >
                 Confirm Booking

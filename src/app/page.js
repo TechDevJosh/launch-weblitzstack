@@ -282,6 +282,10 @@ export default function App() {
   const [availableTimes, setAvailableTimes] = useState([]);
   const [isTimeLoading, setIsTimeLoading] = useState(false);
   const [expandedAddOn, setExpandedAddOn] = useState(null);
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+  const [leadError, setLeadError] = useState('');
+  const [isEmailSending, setIsEmailSending] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   // --- Step Definitions ---
   const steps = [
@@ -408,11 +412,15 @@ export default function App() {
   const navigateToStepById = (id) => {
     const stepIndex = steps.findIndex((step) => step.id === id);
     if (stepIndex !== -1) {
+      const targetStep = steps[stepIndex];
       setCurrentStep(stepIndex);
+      if (targetStep.isFinalConfirmation) {
+        sendConfirmationEmail();
+      }
     }
   };
 
-  const nextStep = () => {
+  const nextStep = async () => {
     if (currentStepConfig.key && currentStepConfig.required) {
       const isValid = validateField(
         currentStepConfig.key,
@@ -427,7 +435,21 @@ export default function App() {
         email: formData.email,
         contactNumber: formData.contactNumber,
       };
-      console.log('Lead Captured:', leadData);
+      try {
+        setIsSubmittingLead(true);
+        setLeadError('');
+        const res = await fetch('/api/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(leadData),
+        });
+        if (!res.ok) throw new Error('Failed to submit');
+      } catch (err) {
+        setLeadError('There was a problem submitting your info.');
+        return;
+      } finally {
+        setIsSubmittingLead(false);
+      }
     }
     setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
   };
@@ -445,6 +467,28 @@ export default function App() {
     });
     setErrors({});
     setCurrentStep(0);
+  };
+
+  const sendConfirmationEmail = async () => {
+    try {
+      setIsEmailSending(true);
+      setEmailError('');
+      const quoteSummary = `Tier: ${finalPackage.tier.name}, Setup Fee: ₱${finalPackage.totalSetupFee.toLocaleString()}, Monthly: ₱${finalPackage.monthlyFee.toLocaleString()}, Add-Ons: ${finalPackage.addOns.map((a) => a.label).join(', ') || 'None'}`;
+      const res = await fetch('/api/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.email,
+          fullName: formData.fullName,
+          quoteSummary,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to send email');
+    } catch (err) {
+      setEmailError('Failed to send confirmation email.');
+    } finally {
+      setIsEmailSending(false);
+    }
   };
 
   const finalPackage = useMemo(() => {
@@ -710,6 +754,12 @@ export default function App() {
           <p className="text-lg text-gray-300 mb-8">
             {currentStepConfig.message}
           </p>
+          {isEmailSending && (
+            <p className="text-gray-400 mb-4">Sending confirmation email...</p>
+          )}
+          {emailError && (
+            <p className="text-red-400 mb-4">{emailError}</p>
+          )}
           <ReferralAndShare referralCode={finalPackage.referralCode} />
           <button
             onClick={startOver}
@@ -927,11 +977,14 @@ export default function App() {
           )}
           <button
             onClick={nextStep}
-            disabled={!isStepValid(currentStep)}
+            disabled={!isStepValid(currentStep) || isSubmittingLead}
             className="bg-blue-600 text-white font-bold py-3 px-8 rounded-full hover:bg-blue-700 transition disabled:bg-gray-500 disabled:cursor-not-allowed transform hover:scale-105"
           >
-            Next
+            {isSubmittingLead ? 'Submitting...' : 'Next'}
           </button>
+          {leadError && currentStepConfig.key === 'contactNumber' && (
+            <p className="text-red-400 mt-2 w-full text-center">{leadError}</p>
+          )}
         </div>
       </div>
     );
